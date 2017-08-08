@@ -1,0 +1,118 @@
+#!/usr/bin/env ruby
+require 'slop'
+require 'dnsimple'
+
+#
+class DnsimpleIpUpdater
+  DEFAULT_DOMAIN = 'pod.haus'
+  DEFAULT_TTL = '60'
+  IP_REGEX = /^(\d+\.\d+\.\d+\.\d+)/
+  SKIP_IPS = ['127.0.0.1']
+  RECORD_TYPE = 'A'
+
+  def initialize(opts)
+    @opts = opts
+    @client = Dnsimple::Client.new(access_token: opts.get('access-token'))
+    if record_id
+      update_record
+    else
+      create_record
+    end
+  end
+
+  def update_record
+    puts "Updating #{RECORD_TYPE} record for #{host}.#{domain} to #{ip_address} with TTL #{ttl}."
+    @client.zones.update_record(account_id, domain, record_id,
+      name: host,
+      type: RECORD_TYPE,
+      content: ip_address,
+      ttl: ttl
+    )
+  end
+
+  def create_record
+    puts "Creating #{RECORD_TYPE} record for #{host}.#{domain} with #{ip_address} and TTL #{ttl}."
+    @client.zones.create_record(account_id, domain,
+      name: host,
+      type: RECORD_TYPE,
+      content: ip_address,
+      ttl: ttl
+    )
+  end
+
+  def host
+    @opts.get('host')
+  end
+
+  def domain
+    @opts.get('domain')
+  end
+
+  def ip_address
+    @opts.get('ip-address')
+  end
+
+  def ttl
+    @opts.get('ttl')
+  end
+
+  # Find the account id for the current access token
+  def account_id
+    @account_id ||= @client.identity.whoami.data.account.id
+  end
+
+  def record_id
+    @record ||= @client.zones.all_records(account_id, @opts.get('domain')).data.find { |record|
+      record.name == @opts.get('host') && record.type == RECORD_TYPE
+    }
+    @record ? @record.id : nil
+  end
+
+  # Find the zone id matching the domain specified
+  def zone_id
+    @zone_id ||= @client.zones.all_zones(account_id).data.find { |z|
+      z.name == @opts.get('domain')
+    }.id
+  end
+
+  class << self
+    # Parse command line options and execute
+    def run
+      opts = Slop.parse do |o|
+        o.string '--host',
+          "Host name to set, default: #{default_hostname}", default: default_hostname
+        o.string '--domain',
+          "Domain to set, default: #{DEFAULT_DOMAIN}", default: DEFAULT_DOMAIN
+        o.string '--access-token',
+          'DNSimple account access token, default: $DNSIMPLE_ACCESS_TOKEN', default: ENV['DNSIMPLE_ACCESS_TOKEN']
+        o.string '--ip-address',
+          "IP address to register, default: #{default_ip_address}", default: default_ip_address
+        o.string '--ttl',
+          "TTL for record, default: #{DEFAULT_TTL}", default: DEFAULT_TTL
+        o.on '--help', 'Print usage details' do
+          puts o
+          exit
+        end
+      end
+      new(opts)
+    end
+
+    # Find the current hostname using `hostname`
+    def default_hostname
+      `hostname`.gsub(/\n/, '').downcase
+    end
+
+    # Find the current ip from `ifconfig` skipping 127.0.0.1
+    def default_ip_address
+      ifconfig = `ifconfig`
+      entries = ifconfig.split('inet ')
+      entries = entries.map do |e|
+        match = e.match(IP_REGEX)
+        match && match[1]
+      end
+      entries.find {|e| e && !SKIP_IPS.include?(e)}
+    end
+  end
+end
+
+DnsimpleIpUpdater.run

@@ -1,0 +1,19 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    dnsimple (4.3.0)
+      httparty
+    httparty (0.15.6)
+      multi_xml (>= 0.5.2)
+    multi_xml (0.6.0)
+    slop (4.5.0)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  dnsimple
+  slop
+
+BUNDLED WITH
+   1.15.3
