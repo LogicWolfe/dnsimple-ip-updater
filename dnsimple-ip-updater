@@ -105,7 +105,7 @@ class DnsimpleIpUpdater
     # Find the current ip from `ifconfig` skipping 127.0.0.1
     def default_ip_address
       ifconfig = `ifconfig`
-      entries = ifconfig.split('inet ')
+      entries = ifconfig.split(/inet (addr:)?/)
       entries = entries.map do |e|
         match = e.match(IP_REGEX)
         match && match[1]
